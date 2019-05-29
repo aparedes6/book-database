@@ -1,0 +1,246 @@
+USE books;
+
+/*
+    Requirements Table    
+        
+	View Name								Req. A		Req. B		Req. C		Req. D		Req. E
+    query_awards_per_book	  				X					  	  X			  X
+    query_publication_states_by_genre	  	X			  X						  X
+    query_top_3_genre		  				X						  X			  X
+    query_CA_books			  				X			  X									  X
+    query_multi_genre_authors	  			X			  X						  X
+    query_books_more_than_one_edition		X			  X
+	query_authors_with_awards		    	X						  X			  X
+	query_books_with_prize_in_award_name	X			  X						  X			  X
+
+*/
+
+/* 	
+	Query 1 
+	Description: Finds how many distinct awards each book has received in descending order, then by book title.
+    Requirement Fullfillment: A, C, D
+*/
+DROP VIEW IF EXISTS query_awards_per_book;
+CREATE VIEW query_awards_per_book AS
+    SELECT 
+        b.book_title AS 'Book',
+        CONCAT(a.author_last_name,
+                ', ',
+                a.author_first_name) AS 'Author',
+        COUNT(DISTINCT ab.award_id) AS 'Award Count'
+    FROM
+        books b
+            INNER JOIN
+        award_books ab ON ab.book_id = b.book_id
+            INNER JOIN
+        book_authors ba ON b.book_id = ba.book_id
+            INNER JOIN
+        authors a ON ba.author_id = a.author_id
+    GROUP BY ab.book_id
+    ORDER BY COUNT(DISTINCT ab.award_id) DESC , b.book_title;
+SELECT 
+    *
+FROM
+    query_awards_per_book;
+
+/* 	
+	Query 2 
+	Description: Displays the top genre published in every state where the count for books per genre is greater than 1. This query EXLUDES all cities outside the US.
+    Requirement Fullfillment: A, B, D
+*/
+DROP VIEW IF EXISTS query_publication_states_by_genre;
+CREATE VIEW query_publication_states_by_genre AS
+    SELECT DISTINCT
+        Publisher_state AS 'Publication State',
+        publishers.Publisher_name AS 'Publisher',
+        Genre_name AS 'Genre',
+        COUNT(DISTINCT book_id) AS 'Book Count'
+    FROM
+        books
+            JOIN
+        books_by_genre USING (book_id)
+            JOIN
+        genre USING (genre_id)
+            JOIN
+        publishers USING (publisher_id)
+    GROUP BY Publisher_state
+    HAVING COUNT(DISTINCT book_id) > 1
+        AND (publisher_state != ''
+        OR publisher_state != NULL)
+    ORDER BY COUNT(DISTINCT book_id) DESC;
+SELECT 
+    *
+FROM
+    query_publication_states_by_genre;
+
+/* 	
+	Query 3
+	Description: Return the top three genres with the most awards. Sorts by order of most awards.
+    Requirement Fullfillment: A, C, D
+*/
+DROP VIEW IF EXISTS query_top_3_genre;
+CREATE VIEW query_top_3_genre AS
+    SELECT 
+        g.genre_name AS 'Genre',
+        COUNT(DISTINCT ab.award_id) AS 'Award Count'
+    FROM
+        books b
+            INNER JOIN
+        award_books ab ON ab.book_id = b.book_id
+            INNER JOIN
+        books_by_genre bbg ON b.book_id = bbg.book_id
+            INNER JOIN
+        genre g ON bbg.genre_id = g.genre_id
+    GROUP BY bbg.genre_id
+    ORDER BY COUNT(DISTINCT ab.award_id) DESC
+    LIMIT 3;
+SELECT 
+    *
+FROM
+    query_top_3_genre;
+
+/* 	
+	Query 4
+	Description: Return all books published from the state of California. Sort by publisher name, then book title.
+    Requirement Fullfillment: A, B, E
+*/
+DROP VIEW IF EXISTS query_CA_books;
+CREATE VIEW query_CA_books AS
+    SELECT 
+        Book_title AS 'Book',
+        Publisher_name AS 'Publisher',
+        Publisher_city AS 'Publication City',
+        publisher_state AS 'Publication State'
+    FROM
+        books
+            JOIN
+        publishers USING (Publisher_id)
+    WHERE
+        Publisher_id IN (SELECT 
+                Publisher_id
+            FROM
+                publishers
+            WHERE
+                Publisher_state = 'CA')
+    ORDER BY Publisher_name , Book_title;
+SELECT 
+    *
+FROM
+    query_CA_books;
+
+/* 	
+	Query 5
+	Description: Displays all authors that have written books across at least two different genres.
+    Requirement Fullfillment: A, B, D
+*/
+DROP VIEW IF EXISTS query_multi_genre_authors;
+CREATE VIEW query_multi_genre_authors AS
+    SELECT 
+        CONCAT(a.author_last_name,
+                ', ',
+                a.author_first_name) AS 'Author',
+        COUNT(DISTINCT g.genre_id) AS 'Genre Count'
+    FROM
+        books b
+            INNER JOIN
+        Book_Authors ba ON ba.book_id = b.book_id
+            INNER JOIN
+        Authors a ON a.author_id = ba.author_id
+            INNER JOIN
+        Books_By_Genre bbg ON bbg.book_id = b.book_id
+            INNER JOIN
+        Genre g ON bbg.genre_id = g.genre_id
+    GROUP BY a.author_id
+    HAVING COUNT(DISTINCT g.genre_id) > 1
+    ORDER BY COUNT(DISTINCT g.genre_id) DESC , a.author_last_name , a.author_first_name;
+SELECT 
+    *
+FROM
+    query_multi_genre_authors;
+
+/* 	Query 6 
+	Description: Return books that have more than one edition. Sort by book title in ascending order.
+    Requirement Fullfillment: A, B
+*/
+DROP VIEW IF EXISTS query_books_more_than_one_edition;
+CREATE VIEW query_books_more_than_one_edition AS
+    SELECT 
+        Book_title AS 'Book Title',
+        publisher_name AS 'Publisher Name',
+        Publisher_city AS 'Publisher City',
+        Publisher_state AS 'Publisher State',
+        Edition
+    FROM
+        books
+            JOIN
+        publishers USING (publisher_id)
+    WHERE
+        Edition > 1
+    ORDER BY Book_title;
+SELECT 
+    *
+FROM
+    query_books_more_than_one_edition;
+
+
+/* 	Query 7 
+	Description: Return authors who have award(s) and the award count. Sort by author's last name in ascending order.
+    Requirement Fullfillment: A, C, D
+*/
+DROP VIEW IF EXISTS query_authors_with_awards;
+CREATE VIEW query_authors_with_awards AS
+    SELECT 
+        CONCAT(Author_last_name,
+                ', ',
+                Author_first_name) AS 'Author Name',
+        COUNT(award_id) AS 'Award Count'
+    FROM
+        authors
+            JOIN
+        book_authors USING (Author_id)
+            JOIN
+        books USING (Book_id)
+            JOIN
+        award_books USING (Book_id)
+    GROUP BY Author_id
+    ORDER BY Author_last_name;
+
+SELECT 
+    *
+FROM
+    query_authors_with_awards;
+
+
+/* 	Query 8 
+	Description: Return books that have award name that contains the word "Prize". Sort by book title in ascending order.
+    Requirement Fullfillment: A, B, D, E
+*/
+DROP VIEW IF EXISTS query_books_with_prize_in_award_name;
+CREATE VIEW query_books_with_prize_in_award_name AS
+    SELECT 
+        Book_title AS 'Book',
+		CONCAT(Author_first_name, ' ', author_last_name) AS 'Author',
+        Award_name AS 'Award Name'
+    FROM
+        books b
+            JOIN
+        award_books USING (Book_id)
+            JOIN
+        awards USING (Award_id)
+			JOIN
+		book_authors USING (book_id)
+			JOIN
+		authors USING (author_id)
+    WHERE
+        award_id IN (SELECT 
+                awards.award_id
+            FROM
+                awards
+            WHERE
+                Award_name LIKE '%Prize%')
+    ORDER BY Book_title;
+SELECT 
+    *
+FROM
+    query_books_with_prize_in_award_name;
+
